@@ -1,7 +1,8 @@
 const { searchYouTubeVideos } = require('./youtubeService');
+const { RESOURCE_EFFECTIVENESS_MATRIX, scoreResourceWithMatrix } = require('../utils/resourceEffectiveness');
 
 const DEFAULT_RESOURCES_LIMIT = 3;
-const YOUTUBE_RESULTS_LIMIT = 1;
+const YOUTUBE_RESULTS_LIMIT = 2;
 const YOUTUBE_FETCH_PER_QUERY = 4;
 
 const dedupeByUrl = (resources) => {
@@ -39,34 +40,46 @@ const toKeywordSet = (text) => {
   );
 };
 
-const scoreVideoMatch = (video, topicKeywords, subtopicKeywords) => {
-  const haystack = `${video.title || ''} ${video.channelName || ''} ${video.sourceQuery || ''}`.toLowerCase();
-
-  let score = 0;
-  for (const word of topicKeywords) {
-    if (haystack.includes(word)) score += 2;
+const countKeywordHits = (haystack, keywords) => {
+  let hits = 0;
+  for (const word of keywords) {
+    if (haystack.includes(word)) hits += 1;
   }
-  for (const word of subtopicKeywords) {
-    if (haystack.includes(word)) score += 4;
-  }
-
-  if (haystack.includes('tutorial')) score += 2;
-  if (haystack.includes('beginner')) score += 1;
-  if (haystack.includes('explained')) score += 1;
-
-  return score;
+  return hits;
 };
 
-const pickBestMatchedVideos = (videos, { topicTitle, subtopicTitle, limit }) => {
+const pickBestMatchedVideos = (videos, { topicTitle, subtopicTitle, limit, expectedMinutes }) => {
   const topicKeywords = toKeywordSet(topicTitle);
   const subtopicKeywords = toKeywordSet(subtopicTitle);
 
-  return [...videos]
+  const scored = videos.map((video) => {
+    const haystack = `${video.title || ''} ${video.channelName || ''} ${video.sourceQuery || ''}`.toLowerCase();
+    const topicHits = countKeywordHits(haystack, topicKeywords);
+    const subtopicHits = countKeywordHits(haystack, subtopicKeywords);
+    const matrixScore = scoreResourceWithMatrix({ resource: video, topicTitle, subtopicTitle, expectedMinutes });
+
+    return {
+      video,
+      topicHits,
+      subtopicHits,
+      matrixScore,
+    };
+  });
+
+  // Relevance guardrail: ensure the selected resource is actually about the subtopic.
+  // This prevents "SQL vs NoSQL" from winning when searching for "latency/throughput/availability/consistency".
+  const filtered = scored.filter((entry) => (
+    entry.subtopicHits >= 1 || (entry.topicHits >= 2) || entry.matrixScore.matrix.relevance >= 14
+  ));
+
+  const ranked = (filtered.length ? filtered : scored)
     .sort((a, b) => (
-      scoreVideoMatch(b, topicKeywords, subtopicKeywords) -
-      scoreVideoMatch(a, topicKeywords, subtopicKeywords)
+      b.matrixScore.effectivenessScore - a.matrixScore.effectivenessScore
     ))
-    .slice(0, limit);
+    .slice(0, limit)
+    .map((entry) => entry.video);
+
+  return ranked;
 };
 
 const getFallbackVideoCandidates = async ({ topicTitle, subtopicTitle }) => {
@@ -125,6 +138,7 @@ const generateResourcesFromQueries = async ({
   maxResources = DEFAULT_RESOURCES_LIMIT,
   topicTitle = '',
   subtopicTitle = '',
+  expectedMinutes = null,
 }) => {
   const aiQueries = Array.isArray(queryPlan?.queries)
     ? queryPlan.queries
@@ -142,17 +156,40 @@ const generateResourcesFromQueries = async ({
 
   const youtubeResults = await fetchFromYouTube(queries, YOUTUBE_FETCH_PER_QUERY);
   const dedupedYouTube = dedupeByUrl(youtubeResults);
+  const durationFilteredYouTube = dedupedYouTube.filter((video) => {
+    // Hard constraint: pick only 3–10 minute videos (FYP requirement)
+    if (String(video?.platform || '') !== 'YouTube') return true;
+    const seconds = Number(video?.durationSeconds);
+    if (!Number.isFinite(seconds) || seconds <= 0) return false; // unknown duration => exclude
+    return seconds >= 180 && seconds <= 600;
+  });
   let rankedVideos = pickBestMatchedVideos(dedupedYouTube, {
     topicTitle,
     subtopicTitle,
     limit: YOUTUBE_RESULTS_LIMIT,
+    expectedMinutes,
   });
-  if (rankedVideos.length === 0) {
-    const fallbackVideos = dedupeByUrl(await getFallbackVideoCandidates({ topicTitle, subtopicTitle }));
-    rankedVideos = pickBestMatchedVideos(fallbackVideos, {
+  if (rankedVideos.length === 0 && durationFilteredYouTube.length > 0) {
+    rankedVideos = pickBestMatchedVideos(durationFilteredYouTube, {
       topicTitle,
       subtopicTitle,
       limit: YOUTUBE_RESULTS_LIMIT,
+      expectedMinutes,
+    });
+  }
+  if (rankedVideos.length === 0) {
+    const fallbackVideos = dedupeByUrl(await getFallbackVideoCandidates({ topicTitle, subtopicTitle }));
+    const durationFilteredFallback = fallbackVideos.filter((video) => {
+      if (String(video?.platform || '') !== 'YouTube') return true;
+      const seconds = Number(video?.durationSeconds);
+      if (!Number.isFinite(seconds) || seconds <= 0) return false;
+      return seconds >= 180 && seconds <= 600;
+    });
+    rankedVideos = pickBestMatchedVideos(durationFilteredFallback.length ? durationFilteredFallback : fallbackVideos, {
+      topicTitle,
+      subtopicTitle,
+      limit: YOUTUBE_RESULTS_LIMIT,
+      expectedMinutes,
     });
   }
 
@@ -165,8 +202,23 @@ const generateResourcesFromQueries = async ({
     ...courseLinks,
   ]).slice(0, maxResources);
 
+  // FYP: verify/score fetched resources using a defined matrix
+  const verifiedResources = combinedResources.map((resource) => {
+    const scored = scoreResourceWithMatrix({ resource, topicTitle, subtopicTitle, expectedMinutes });
+    return {
+      ...resource,
+      verification: {
+        matrixName: RESOURCE_EFFECTIVENESS_MATRIX.name,
+        effectivenessScore: scored.effectivenessScore,
+        breakdown: scored.matrix,
+        notes: scored.verificationNotes,
+        verifiedAt: new Date(),
+      },
+    };
+  });
+
   return {
-    resources: combinedResources,
+    resources: verifiedResources,
     sources: {
       youtube: {
         status: 'ok',

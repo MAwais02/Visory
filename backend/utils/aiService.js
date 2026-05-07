@@ -983,6 +983,53 @@ const callGemini = async (prompt, maxTokens = 8192, retries = 3) => {
 };
 
 /**
+ * Helper: Call Gemini API for plain text responses (chat/Q&A).
+ * Note: Do NOT force JSON mime type here.
+ */
+const callGeminiText = async (prompt, maxTokens = 1024, retries = 3) => {
+  let lastError;
+
+  for (const modelName of candidateModelNames) {
+    const model = getModel(modelName);
+
+    for (let attempt = 0; attempt < retries; attempt++) {
+      try {
+        const result = await model.generateContent({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.4,
+            maxOutputTokens: maxTokens,
+          },
+        });
+
+        const response = await result.response;
+
+        const candidate = response.candidates?.[0];
+        if (candidate?.finishReason === 'MAX_TOKENS') {
+          throw new Error('TRUNCATED');
+        }
+
+        return response.text();
+      } catch (error) {
+        lastError = error;
+        if (error?.message === 'TRUNCATED') break;
+
+        const isRetryable = isRetryableGeminiError(error);
+        const isLastAttemptOnModel = attempt === retries - 1;
+        console.error(`Gemini (text) model "${modelName}" attempt ${attempt + 1} failed:`, error.message);
+
+        if (!isRetryable || isLastAttemptOnModel) break;
+
+        const delayMs = getBackoffDelayMs(attempt);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+
+  throw lastError || new Error('Gemini text call failed with unknown error');
+};
+
+/**
  * 4.2.3 - AI Course Generation
  * FIX: Split into two calls — skeleton first, then enrich topics separately.
  * This prevents the single-call response from being truncated at ~11k chars.
@@ -1159,7 +1206,7 @@ const generateResourceQueries = async ({ topicTitle, subtopicTitle, difficulty, 
   };
 };
 
-const generateResources = async ({ topicTitle, subtopicTitle, difficulty, learningStyle }) => {
+const generateResources = async ({ topicTitle, subtopicTitle, difficulty, learningStyle, expectedMinutes }) => {
   let queryPlan;
   try {
     queryPlan = await generateResourceQueries({ topicTitle, subtopicTitle, difficulty, learningStyle });
@@ -1178,6 +1225,7 @@ const generateResources = async ({ topicTitle, subtopicTitle, difficulty, learni
     maxResources: 4,
     topicTitle,
     subtopicTitle,
+    expectedMinutes,
   });
 
   return result.resources;
@@ -1251,4 +1299,90 @@ RETURN ONLY VALID JSON. No markdown, no code blocks, no trailing commas.`;
   return safeParseJSON(raw);
 };
 
-module.exports = { generateCourse, generateResources, generateQuiz, getAdaptiveSuggestion };
+/**
+ * Chat/Q&A: Answer user's doubt about a course.
+ */
+const answerCourseDoubt = async ({ course, messages }) => {
+  const safeMessages = Array.isArray(messages) ? messages : [];
+  const trimmed = safeMessages
+    .map((m) => ({
+      role: m?.role === 'assistant' ? 'assistant' : 'user',
+      content: String(m?.content || '').trim(),
+    }))
+    .filter((m) => m.content)
+    .slice(-12);
+
+  const outline = (course?.topics || [])
+    .slice(0, 12)
+    .map((t, idx) => {
+      const subs = (t?.subtopics || []).slice(0, 6).map((s) => s?.title).filter(Boolean);
+      return `${idx + 1}. ${t?.title || 'Topic'}${subs.length ? ` (subtopics: ${subs.join(', ')})` : ''}`;
+    })
+    .join('\n');
+
+  const transcript = trimmed.map((m) => `${m.role === 'assistant' ? 'Tutor' : 'Student'}: ${m.content}`).join('\n');
+
+  const prompt = `You are a friendly, concise tutor helping a student understand their course.
+
+Course:
+- Title: ${course?.title || 'Untitled'}
+- Description: ${course?.description || ''}
+- Outline:
+${outline || '(No outline)'}
+
+Conversation so far:
+${transcript || '(none)'}
+
+Rules:
+- Answer ONLY the student's last question.
+- Keep it short and practical (max ~10 lines).
+- Use simple examples when helpful.
+- If the question is unclear, ask 1 clarifying question.
+- Do not mention being an AI model.
+
+Tutor:`;
+
+  const text = await callGeminiText(prompt, 900);
+  return String(text || '').trim();
+};
+
+/**
+ * Chat/Q&A: General assistant for the app (no course context).
+ */
+const answerGeneralDoubt = async ({ messages }) => {
+  const safeMessages = Array.isArray(messages) ? messages : [];
+  const trimmed = safeMessages
+    .map((m) => ({
+      role: m?.role === 'assistant' ? 'assistant' : 'user',
+      content: String(m?.content || '').trim(),
+    }))
+    .filter((m) => m.content)
+    .slice(-12);
+
+  const transcript = trimmed.map((m) => `${m.role === 'assistant' ? 'Assistant' : 'User'}: ${m.content}`).join('\n');
+
+  const prompt = `You are a helpful assistant inside a learning app called Visory.
+
+Conversation so far:
+${transcript || '(none)'}
+
+Rules:
+- Answer ONLY the user's last message.
+- Be concise and practical.
+- If the user asks for course-specific help but you don't have the course context, suggest opening a course page.
+- Do not mention being an AI model.
+
+Assistant:`;
+
+  const text = await callGeminiText(prompt, 900);
+  return String(text || '').trim();
+};
+
+module.exports = {
+  generateCourse,
+  generateResources,
+  generateQuiz,
+  getAdaptiveSuggestion,
+  answerCourseDoubt,
+  answerGeneralDoubt,
+};

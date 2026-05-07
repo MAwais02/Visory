@@ -1,12 +1,19 @@
 const express = require('express');
 const router = express.Router();
+const rateLimit = require('express-rate-limit');
 const { protect } = require('../middleware/auth');
 const Course = require('../models/Course');
 const Progress = require('../models/Progress');
-const { generateCourse, generateResources } = require('../utils/aiService');
+const { generateCourse, generateResources, answerCourseDoubt } = require('../utils/aiService');
 
 // All routes protected
 router.use(protect);
+
+const courseChatLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 30,
+  message: { error: 'Chat limit reached. Please try again later.' },
+});
 
 // ─── GET /api/courses ── List user's courses ───────────────────────────────────
 router.get('/', async (req, res, next) => {
@@ -118,6 +125,26 @@ router.get('/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── POST /api/courses/:id/chat ── Course doubt chatbot (Gemini) ──────────────
+router.post('/:id/chat', courseChatLimiter, async (req, res, next) => {
+  try {
+    const course = await Course.findOne({ _id: req.params.id, userId: req.user._id });
+    if (!course) return res.status(404).json({ error: 'Course not found.' });
+
+    const { message, messages } = req.body || {};
+    const userMessage = String(message || '').trim();
+    const history = Array.isArray(messages) ? messages : [];
+    const combined = userMessage ? [...history, { role: 'user', content: userMessage }] : history;
+
+    if (!userMessage && combined.length === 0) {
+      return res.status(400).json({ error: 'Message is required.' });
+    }
+
+    const answer = await answerCourseDoubt({ course, messages: combined });
+    res.json({ answer });
+  } catch (err) { next(err); }
+});
+
 // ─── PUT /api/courses/:id ── Update/edit course (4.2.13) ──────────────────────
 router.put('/:id', async (req, res, next) => {
   try {
@@ -185,6 +212,7 @@ router.post('/:id/topics/:topicIndex/resources', async (req, res, next) => {
       subtopicTitle: targetSubtopic?.title || req.body.subtopic || topic.title,
       difficulty: topic.difficultyLevel,
       learningStyle: req.user.profile.learningStyle,
+      expectedMinutes: Math.max(10, Math.round(((targetSubtopic?.estimatedHours || 1) * 60))),
     });
 
     if (hasExplicitSubtopic && targetSubtopic) {

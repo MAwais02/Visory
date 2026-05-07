@@ -19,23 +19,4 @@ const notificationSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 const Notification = mongoose.model('Notification', notificationSchema);
-
-// ─── Bookmark Model ────────────────────────────────────────────────────────────
-const bookmarkSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course', required: true },
-  topicId: mongoose.Schema.Types.ObjectId,
-  resource: {
-    title: String,
-    url: String,
-    type: String,
-    platform: String,
-    thumbnail: String,
-  },
-  personalNote: String,
-  tags: [String],
-}, { timestamps: true });
-
-const Bookmark = mongoose.model('Bookmark', bookmarkSchema);
-
-module.exports = { Notification, Bookmark };
+module.exports = { Notification };

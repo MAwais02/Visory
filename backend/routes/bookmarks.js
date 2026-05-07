@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { protect } = require('../middleware/auth');
-const { Bookmark } = require('../models/Notification');
+const Bookmark = require('../models/Bookmark');
 
 router.use(protect);
 
@@ -16,6 +16,12 @@ router.get('/', async (req, res, next) => {
 // POST /api/bookmarks
 router.post('/', async (req, res, next) => {
   try {
+    // Debug guard: ensure the loaded Bookmark model has correct schema
+    // If this fails, another file is still registering Bookmark incorrectly.
+    const resourcePath = Bookmark.schema?.path('resource');
+    if (resourcePath?.instance === 'String') {
+      return res.status(500).json({ error: 'Bookmark schema misconfigured (resource is String). Restart backend after fixing model.' });
+    }
     const bookmark = await Bookmark.create({ userId: req.user._id, ...req.body });
     res.status(201).json({ bookmark });
   } catch (err) { next(err); }

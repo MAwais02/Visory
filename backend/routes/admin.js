@@ -5,6 +5,8 @@ const User = require('../models/User');
 const Course = require('../models/Course');
 const Progress = require('../models/Progress');
 const Quiz = require('../models/Quiz');
+const { Notification } = require('../models/Notification');
+const Bookmark = require('../models/Bookmark');
 
 router.use(protect, adminOnly);
 
@@ -50,7 +52,19 @@ router.get('/users', async (req, res, next) => {
       .skip((page - 1) * limit).limit(Number(limit)).sort('-createdAt');
     const total = await User.countDocuments(filter);
 
-    res.json({ users, total, pages: Math.ceil(total / limit) });
+    const userIds = users.map((u) => u._id);
+    const courseCounts = await Course.aggregate([
+      { $match: { userId: { $in: userIds } } },
+      { $group: { _id: '$userId', count: { $sum: 1 } } },
+    ]);
+    const courseCountMap = new Map(courseCounts.map((e) => [String(e._id), e.count]));
+
+    const usersWithCounts = users.map((u) => ({
+      ...u.toObject(),
+      coursesGenerated: courseCountMap.get(String(u._id)) || 0,
+    }));
+
+    res.json({ users: usersWithCounts, total, pages: Math.ceil(total / limit) });
   } catch (err) { next(err); }
 });
 
@@ -58,11 +72,44 @@ router.get('/users', async (req, res, next) => {
 router.patch('/users/:id', async (req, res, next) => {
   try {
     const { isActive, role } = req.body;
+
+    // Prevent admin from deactivating themselves
+    if (String(req.user._id) === String(req.params.id) && isActive === false) {
+      return res.status(400).json({ error: 'You cannot deactivate your own admin account.' });
+    }
+
     const user = await User.findByIdAndUpdate(
       req.params.id, { isActive, role }, { new: true }
     ).select('-password');
     if (!user) return res.status(404).json({ error: 'User not found.' });
     res.json({ user });
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/admin/users/:id — Delete user + cleanup
+router.delete('/users/:id', async (req, res, next) => {
+  try {
+    const targetId = req.params.id;
+
+    // Prevent admin from deleting themselves
+    if (String(req.user._id) === String(targetId)) {
+      return res.status(400).json({ error: 'You cannot delete your own admin account.' });
+    }
+
+    const user = await User.findById(targetId);
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+
+    await Promise.all([
+      Course.deleteMany({ userId: targetId }),
+      Progress.deleteMany({ userId: targetId }),
+      Quiz.deleteMany({ userId: targetId }),
+      Bookmark.deleteMany({ userId: targetId }),
+      Notification.deleteMany({ userId: targetId }),
+    ]);
+
+    await User.deleteOne({ _id: targetId });
+
+    res.json({ message: 'User deleted.' });
   } catch (err) { next(err); }
 });
 

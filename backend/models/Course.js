@@ -6,12 +6,32 @@ const resourceSchema = new mongoose.Schema({
   type: { type: String, enum: ['video', 'article', 'course', 'github', 'book', 'other'] },
   platform: { type: String, enum: ['YouTube', 'Coursera', 'Udemy', 'Medium', 'GitHub', 'Other'] },
   duration: String,
+  durationSeconds: Number,
   thumbnail: String,
   rating: Number,
+  ratingCount: Number,
+  viewCount: Number,
+  likeCount: Number,
   channelName: String,
   publishedDate: Date,
   sourceQuery: String,
   isBookmarked: { type: Boolean, default: false },
+  // FYP: verification + effectiveness matrix (static, at fetch-time)
+  verification: {
+    matrixName: String,
+    effectivenessScore: { type: Number, default: 0 },
+    breakdown: {
+      relevance: Number,
+      sourceReliability: Number,
+      freshness: Number,
+      engagementSignals: Number,
+      durationFit: Number,
+      contentSignals: Number,
+      total: Number,
+    },
+    notes: [String],
+    verifiedAt: Date,
+  },
 });
 
 const subtopicSchema = new mongoose.Schema({

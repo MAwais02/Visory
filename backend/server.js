@@ -18,6 +18,7 @@ const resourceRoutes = require('./routes/resources');
 const notificationRoutes = require('./routes/notifications');
 const adminRoutes = require('./routes/admin');
 const bookmarkRoutes = require('./routes/bookmarks');
+const chatRoutes = require('./routes/chat');
 
 // Config imports
 require('./config/passport');
@@ -60,6 +61,7 @@ app.use('/api/resources', resourceRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/bookmarks', bookmarkRoutes);
+app.use('/api/chat', chatRoutes);
 
 // Health Check 
 app.get('/api/health', (req, res) => {
