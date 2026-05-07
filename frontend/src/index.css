@@ -1,0 +1,75 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg: #0f0f1a;
+    --surface-1: #16161f;
+    --surface-2: #1c1c2a;
+    --surface-3: #222236;
+    --border: rgba(255,255,255,0.07);
+    --primary: #6366f1;
+    --primary-glow: rgba(99,102,241,0.3);
+    --text: #e8e8f0;
+    --text-muted: #8888aa;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    @apply bg-surface text-[#e8e8f0] font-sans antialiased;
+    background-color: var(--bg);
+  }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--surface-1); }
+  ::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+}
+
+@layer components {
+  .card {
+    @apply bg-[#16161f] border border-white/[0.07] rounded-2xl;
+  }
+
+  .btn-primary {
+    @apply bg-primary-500 hover:bg-primary-600 text-white font-semibold px-5 py-2.5 rounded-xl
+           transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed
+           shadow-lg shadow-primary-500/20;
+  }
+
+  .btn-ghost {
+    @apply bg-white/5 hover:bg-white/10 text-[#e8e8f0] font-medium px-5 py-2.5 rounded-xl
+           transition-all duration-200 border border-white/[0.07] active:scale-95;
+  }
+
+  .input {
+    @apply w-full bg-[#1c1c2a] border border-white/[0.07] rounded-xl px-4 py-3 text-[#e8e8f0]
+           placeholder:text-[#8888aa] focus:outline-none focus:border-primary-500/50
+           focus:ring-2 focus:ring-primary-500/20 transition-all duration-200;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-[#8888aa] mb-1.5;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-primary { @apply badge bg-primary-500/20 text-primary-300; }
+  .badge-green { @apply badge bg-green-500/20 text-green-400; }
+  .badge-yellow { @apply badge bg-yellow-500/20 text-yellow-400; }
+  .badge-red { @apply badge bg-red-500/20 text-red-400; }
+
+  .shimmer {
+    background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 50%, var(--surface-2) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  .glow { box-shadow: 0 0 40px var(--primary-glow); }
+}
