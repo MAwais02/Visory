@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Zap, BookOpen, Brain, Target, BarChart2, Bell, ArrowRight, CheckCircle2 } from 'lucide-react'
+import { Zap, BookOpen, Brain, Target, BarChart2, Bell, ArrowRight, Mail, Phone, MapPin, Github, Linkedin, Twitter, Instagram } from 'lucide-react'
 
 const features = [
   { icon: Brain, title: 'AI Course Generation', desc: 'Describe what you want to learn. Get a full structured curriculum in seconds.' },
@@ -11,6 +11,19 @@ const features = [
 ]
 
 export default function LandingPage() {
+  const contact = {
+    email: 'contact@visory.app',
+    phone: '+92 300 0000000',
+    addressLine: 'Lahore, Pakistan',
+    mapQuery: 'Lahore Pakistan',
+    socials: [
+      { name: 'GitHub', href: 'https://github.com/', icon: Github },
+      { name: 'LinkedIn', href: 'https://www.linkedin.com/', icon: Linkedin },
+      { name: 'X (Twitter)', href: 'https://twitter.com/', icon: Twitter },
+      { name: 'Instagram', href: 'https://www.instagram.com/', icon: Instagram },
+    ],
+  }
+
   return (
     <div className="min-h-screen bg-[#0f0f1a] text-[#e8e8f0]">
       {/* Nav */}
@@ -22,6 +35,7 @@ export default function LandingPage() {
           <span className="font-bold text-white">Visory</span>
         </div>
         <div className="flex items-center gap-3">
+          <Link to="/contact" className="text-sm text-[#8888aa] hover:text-white transition-colors">Contact</Link>
           <Link to="/login" className="text-sm text-[#8888aa] hover:text-white transition-colors">Sign in</Link>
           <Link to="/register" className="btn-primary text-sm py-2">Get Started Free</Link>
         </div>
@@ -79,8 +93,94 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <footer className="border-t border-white/[0.07] py-6 text-center text-xs text-[#8888aa]">
-        © {new Date().getFullYear()} Visory · FYP Project
+      {/* Contact + Location */}
+      <section className="max-w-6xl mx-auto px-4 pb-16">
+        <div className="card p-6">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <h2 className="text-xl font-bold text-white">Contact & Location</h2>
+              <p className="text-sm text-[#8888aa] mt-1">
+                Providing contact information and a map helps users reach you easily.
+              </p>
+            </div>
+            <Link to="/contact" className="btn-ghost text-sm py-2">Contact Us</Link>
+          </div>
+
+          <div className="grid lg:grid-cols-2 gap-4 mt-5 items-start">
+            <div className="space-y-3">
+              <a href={`mailto:${contact.email}`} className="flex items-center gap-3 text-sm text-[#e8e8f0] hover:text-primary-300">
+                <span className="w-9 h-9 rounded-xl bg-primary-500/10 flex items-center justify-center">
+                  <Mail size={16} className="text-primary-400" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-xs text-[#8888aa]">Email</span>
+                  <span className="block font-medium truncate">{contact.email}</span>
+                </span>
+              </a>
+
+              <a href={`tel:${contact.phone.replace(/\s/g, '')}`} className="flex items-center gap-3 text-sm text-[#e8e8f0] hover:text-primary-300">
+                <span className="w-9 h-9 rounded-xl bg-primary-500/10 flex items-center justify-center">
+                  <Phone size={16} className="text-primary-400" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-xs text-[#8888aa]">Phone</span>
+                  <span className="block font-medium truncate">{contact.phone}</span>
+                </span>
+              </a>
+
+              <div className="flex items-center gap-3 text-sm text-[#e8e8f0]">
+                <span className="w-9 h-9 rounded-xl bg-primary-500/10 flex items-center justify-center">
+                  <MapPin size={16} className="text-primary-400" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-xs text-[#8888aa]">Location</span>
+                  <span className="block font-medium truncate">{contact.addressLine}</span>
+                </span>
+              </div>
+
+              <div className="pt-2">
+                <p className="text-sm font-semibold text-white mb-2">Social</p>
+                <div className="flex flex-wrap gap-2">
+                  {contact.socials.map(({ name, href, icon: Icon }) => (
+                    <a
+                      key={name}
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-2 rounded-xl bg-white/[0.03] border border-white/[0.07] text-[#e8e8f0] hover:border-white/[0.14] hover:bg-white/[0.05] transition-all inline-flex items-center gap-2 text-sm"
+                    >
+                      <Icon size={16} className="text-[#b9b9d2]" />
+                      {name}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl overflow-hidden border border-white/[0.07] bg-black/20">
+              <div className="aspect-video">
+                <iframe
+                  title="Visory Location"
+                  className="w-full h-full"
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                  src={`https://www.google.com/maps?q=${encodeURIComponent(contact.mapQuery)}&output=embed`}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer className="border-t border-white/[0.07] py-8">
+        <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-[#8888aa]">
+          <p>© {new Date().getFullYear()} Visory · FYP Project</p>
+          <div className="flex items-center gap-4">
+            <Link to="/contact" className="hover:text-white transition-colors">Contact</Link>
+            <Link to="/login" className="hover:text-white transition-colors">Sign in</Link>
+            <Link to="/register" className="hover:text-white transition-colors">Get started</Link>
+          </div>
+        </div>
       </footer>
     </div>
   )

@@ -20,9 +20,11 @@ import AdminPage from './pages/AdminPage'
 import AuthCallbackPage from './pages/AuthCallbackPage'
 import NotFoundPage from './pages/NotFoundPage'
 import NotificationsPage from './pages/NotificationsPage'
+import ContactPage from './pages/ContactPage'
 
 // Layout
 import AppLayout from './components/shared/AppLayout'
+import CourseChatWidget from './components/course/CourseChatWidget'
 
 const PrivateRoute = ({ children }) => {
   const token = useAuthStore(s => s.token)
@@ -55,6 +57,7 @@ export default function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
         <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
+        <Route path="/contact" element={<ContactPage />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
 
         {/* Private — inside app layout */}
@@ -71,6 +74,7 @@ export default function App() {
           <Route path="/bookmarks" element={<BookmarksPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/contact" element={<ContactPage />} />
         </Route>
 
         {/* Admin */}
@@ -80,6 +84,8 @@ export default function App() {
 
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
+
+      <CourseChatWidget />
     </BrowserRouter>
   )
 }

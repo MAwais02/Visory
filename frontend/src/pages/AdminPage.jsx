@@ -1,6 +1,6 @@
 // AdminPage.jsx — 4.2.15
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Users, BookOpen, Trophy, TrendingUp, Shield, UserCheck, UserX } from 'lucide-react'
+import { Users, BookOpen, Trophy, TrendingUp, Shield, UserCheck, UserX, Trash2 } from 'lucide-react'
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import toast from 'react-hot-toast'
 import api from '../utils/api'
@@ -20,6 +20,12 @@ export default function AdminPage() {
   const toggleMutation = useMutation({
     mutationFn: ({ id, isActive }) => api.patch(`/admin/users/${id}`, { isActive }),
     onSuccess: () => { qc.invalidateQueries(['admin-users']); toast.success('User updated') },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => api.delete(`/admin/users/${id}`),
+    onSuccess: () => { qc.invalidateQueries(['admin-users']); toast.success('User deleted') },
+    onError: (e) => toast.error(e.response?.data?.error || 'Delete failed'),
   })
 
   const stats = statsData?.stats || {}
@@ -74,7 +80,7 @@ export default function AdminPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-white/[0.07]">
-                {['Name', 'Email', 'Role', 'Status', 'Joined', 'Actions'].map(h => (
+                {['Name', 'Email', 'Courses', 'Role', 'Status', 'Joined', 'Actions'].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs text-[#8888aa] font-medium">{h}</th>
                 ))}
               </tr>
@@ -84,18 +90,39 @@ export default function AdminPage() {
                 <tr key={u._id} className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-all">
                   <td className="px-4 py-3 text-white font-medium">{u.name}</td>
                   <td className="px-4 py-3 text-[#8888aa]">{u.email}</td>
+                  <td className="px-4 py-3 text-white">{u.coursesGenerated ?? 0}</td>
                   <td className="px-4 py-3">
                     <span className={`badge ${u.role === 'admin' ? 'badge-yellow' : 'badge-primary'}`}>{u.role}</span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`badge ${u.isActive ? 'badge-green' : 'badge-red'}`}>{u.isActive ? 'Active' : 'Inactive'}</span>
+                    <span className={`badge ${u.isActive ? 'badge-green' : 'badge-red'}`}>{u.isActive ? 'Active' : 'Banned'}</span>
                   </td>
                   <td className="px-4 py-3 text-[#8888aa] text-xs">{new Date(u.createdAt).toLocaleDateString()}</td>
                   <td className="px-4 py-3">
-                    <button onClick={() => toggleMutation.mutate({ id: u._id, isActive: !u.isActive })}
-                      className={`p-1.5 rounded-lg transition-all ${u.isActive ? 'text-red-400 hover:bg-red-500/10' : 'text-green-400 hover:bg-green-500/10'}`}>
-                      {u.isActive ? <UserX size={14} /> : <UserCheck size={14} />}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => toggleMutation.mutate({ id: u._id, isActive: !u.isActive })}
+                        className={`p-1.5 rounded-lg transition-all ${u.isActive ? 'text-red-400 hover:bg-red-500/10' : 'text-green-400 hover:bg-green-500/10'}`}
+                        title={u.isActive ? 'Ban user' : 'Unban user'}
+                      >
+                        {u.isActive ? <UserX size={14} /> : <UserCheck size={14} />}
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          const ok = window.confirm(
+                            `Delete ${u.name} (${u.email})?\n\nThis will remove their courses, progress, quizzes, bookmarks and notifications.`
+                          )
+                          if (!ok) return
+                          deleteMutation.mutate(u._id)
+                        }}
+                        className="p-1.5 rounded-lg transition-all text-red-400 hover:bg-red-500/10"
+                        title="Delete user"
+                        disabled={deleteMutation.isPending}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { BookOpen, Plus, Clock, Trash2, RefreshCw, MoreVertical } from 'lucide-react'
-import { useState } from 'react'
+import { BookOpen, Plus, Clock, Trash2, MoreVertical, Search, X } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import api from '../utils/api'
 
@@ -10,6 +10,7 @@ const difficultyColor = { beginner: 'badge-green', intermediate: 'badge-yellow',
 export default function CoursesPage() {
   const qc = useQueryClient()
   const [menuOpen, setMenuOpen] = useState(null)
+  const [searchQuery, setSearchQuery] = useState('')
 
   const { data, isLoading } = useQuery({
     queryKey: ['courses'],
@@ -22,13 +23,35 @@ export default function CoursesPage() {
   })
 
   const courses = data?.courses || []
+  const normalizedQuery = searchQuery.trim().toLowerCase()
+
+  const filteredCourses = useMemo(() => {
+    if (!normalizedQuery) return courses
+    return courses.filter((course) => {
+      const haystack = [
+        course.title,
+        course.difficulty,
+        course.status,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+
+      return haystack.includes(normalizedQuery)
+    })
+  }, [courses, normalizedQuery])
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">My Courses</h1>
-          <p className="text-[#8888aa] text-sm mt-0.5">{courses.length} course{courses.length !== 1 ? 's' : ''}</p>
+          <p className="text-[#8888aa] text-sm mt-0.5">
+            {filteredCourses.length} course{filteredCourses.length !== 1 ? 's' : ''}
+            {!!normalizedQuery && (
+              <span className="text-[#6f6f8f]"> · {courses.length} total</span>
+            )}
+          </p>
         </div>
         <Link to="/courses/generate" className="btn-primary flex items-center gap-2 text-sm">
           <Plus size={16} /> New Course
@@ -49,59 +72,98 @@ export default function CoursesPage() {
           </Link>
         </div>
       ) : (
-        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {courses.map(course => (
-            <div key={course._id} className="card p-5 hover:border-white/[0.14] transition-all group flex flex-col relative">
-              {/* Menu */}
-              <div className="absolute top-4 right-4">
-                <button onClick={() => setMenuOpen(menuOpen === course._id ? null : course._id)}
-                  className="text-[#8888aa] hover:text-white p-1 rounded-lg hover:bg-white/5 transition-all">
-                  <MoreVertical size={16} />
+        <div className="space-y-4">
+          <div className="card p-4">
+            <div className="flex items-center gap-2">
+              <Search size={16} className="text-[#8888aa] flex-shrink-0" />
+              <input
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value)
+                  if (menuOpen) setMenuOpen(null)
+                }}
+                className="input !bg-transparent !border-0 !p-0 flex-1"
+                placeholder="Search your courses..."
+              />
+              {!!normalizedQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="text-[#8888aa] hover:text-white p-1 rounded-lg hover:bg-white/5 transition-all"
+                  aria-label="Clear search"
+                >
+                  <X size={16} />
                 </button>
-                {menuOpen === course._id && (
-                  <div className="absolute right-0 top-8 bg-[#1c1c2a] border border-white/[0.07] rounded-xl shadow-xl z-10 w-36 overflow-hidden"
-                    onMouseLeave={() => setMenuOpen(null)}>
-                    <Link to={`/courses/${course._id}`}
-                      className="flex items-center gap-2 px-3 py-2.5 text-xs text-[#e8e8f0] hover:bg-white/5 transition-all">
-                      <BookOpen size={13} /> Open
-                    </Link>
-                    <button onClick={() => deleteMutation.mutate(course._id)}
-                      className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-red-400 hover:bg-red-500/10 transition-all">
-                      <Trash2 size={13} /> Archive
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <Link to={`/courses/${course._id}`} className="flex-1">
-                <div className="flex items-start gap-2 mb-3 pr-6">
-                  <h3 className="font-semibold text-white group-hover:text-primary-400 transition-colors line-clamp-2 leading-snug">
-                    {course.title}
-                  </h3>
-                </div>
-
-                <div className="flex items-center gap-2 mb-3">
-                  <span className={`badge ${difficultyColor[course.difficulty] || 'badge-primary'}`}>{course.difficulty}</span>
-                  <span className={`badge ${course.status === 'completed' ? 'badge-green' : 'badge-primary'}`}>{course.status}</span>
-                </div>
-
-                <p className="text-xs text-[#8888aa] flex items-center gap-1 mb-3">
-                  <Clock size={11} /> {course.estimatedTotalHours}h
-                </p>
-
-                <div className="space-y-1">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-[#8888aa]">Progress</span>
-                    <span className="text-white font-medium">{course.completionPercentage || 0}%</span>
-                  </div>
-                  <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-primary-500 to-primary-400 rounded-full transition-all"
-                      style={{ width: `${course.completionPercentage || 0}%` }} />
-                  </div>
-                </div>
-              </Link>
+              )}
             </div>
-          ))}
+          </div>
+
+          {filteredCourses.length === 0 ? (
+            <div className="card p-10 text-center">
+              <BookOpen size={40} className="text-[#8888aa] mx-auto mb-3" />
+              <h2 className="text-white font-semibold">No courses found</h2>
+              <p className="text-[#8888aa] text-sm mt-2">
+                No results for <span className="text-white font-medium">"{searchQuery.trim()}"</span>.
+              </p>
+              <button onClick={() => setSearchQuery('')} className="btn-ghost mt-5 text-sm inline-flex items-center gap-2">
+                <X size={14} /> Clear search
+              </button>
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {filteredCourses.map(course => (
+                <div key={course._id} className="card p-5 hover:border-white/[0.14] transition-all group flex flex-col relative">
+                  {/* Menu */}
+                  <div className="absolute top-4 right-4">
+                    <button onClick={() => setMenuOpen(menuOpen === course._id ? null : course._id)}
+                      className="text-[#8888aa] hover:text-white p-1 rounded-lg hover:bg-white/5 transition-all">
+                      <MoreVertical size={16} />
+                    </button>
+                    {menuOpen === course._id && (
+                      <div className="absolute right-0 top-8 bg-[#1c1c2a] border border-white/[0.07] rounded-xl shadow-xl z-10 w-36 overflow-hidden"
+                        onMouseLeave={() => setMenuOpen(null)}>
+                        <Link to={`/courses/${course._id}`}
+                          className="flex items-center gap-2 px-3 py-2.5 text-xs text-[#e8e8f0] hover:bg-white/5 transition-all">
+                          <BookOpen size={13} /> Open
+                        </Link>
+                        <button onClick={() => deleteMutation.mutate(course._id)}
+                          className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-red-400 hover:bg-red-500/10 transition-all">
+                          <Trash2 size={13} /> Archive
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <Link to={`/courses/${course._id}`} className="flex-1">
+                    <div className="flex items-start gap-2 mb-3 pr-6">
+                      <h3 className="font-semibold text-white group-hover:text-primary-400 transition-colors line-clamp-2 leading-snug">
+                        {course.title}
+                      </h3>
+                    </div>
+
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className={`badge ${difficultyColor[course.difficulty] || 'badge-primary'}`}>{course.difficulty}</span>
+                      <span className={`badge ${course.status === 'completed' ? 'badge-green' : 'badge-primary'}`}>{course.status}</span>
+                    </div>
+
+                    <p className="text-xs text-[#8888aa] flex items-center gap-1 mb-3">
+                      <Clock size={11} /> {course.estimatedTotalHours}h
+                    </p>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-[#8888aa]">Progress</span>
+                        <span className="text-white font-medium">{course.completionPercentage || 0}%</span>
+                      </div>
+                      <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                        <div className="h-full bg-gradient-to-r from-primary-500 to-primary-400 rounded-full transition-all"
+                          style={{ width: `${course.completionPercentage || 0}%` }} />
+                      </div>
+                    </div>
+                  </Link>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

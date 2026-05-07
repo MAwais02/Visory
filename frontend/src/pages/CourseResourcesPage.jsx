@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, ExternalLink, BookOpen, Video, Clock3 } from 'lucide-react'
+import { ArrowLeft, ExternalLink, BookOpen, Clock3, Bookmark, BookmarkCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../utils/api'
 
@@ -53,6 +53,17 @@ export default function CourseResourcesPage() {
     queryFn: () => api.get(`/courses/${id}`).then((r) => r.data),
   })
 
+  const { data: bookmarksData } = useQuery({
+    queryKey: ['bookmarks'],
+    queryFn: () => api.get('/bookmarks').then((r) => r.data),
+  })
+
+  const bookmarkMap = new Map(
+    (bookmarksData?.bookmarks || [])
+      .filter((bm) => bm?.resource?.url)
+      .map((bm) => [bm.resource.url, bm])
+  )
+
   const loadResourcesMutation = useMutation({
     mutationFn: (subtopicIdx) => api.post(`/courses/${id}/topics/${selectedTopicIndex}/resources`, {
       subtopicIndex: subtopicIdx,
@@ -72,6 +83,24 @@ export default function CourseResourcesPage() {
     },
   })
 
+  const addBookmarkMutation = useMutation({
+    mutationFn: (payload) => api.post('/bookmarks', payload),
+    onSuccess: async () => {
+      await qc.invalidateQueries(['bookmarks'])
+      toast.success('Saved to bookmarks')
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Failed to save bookmark'),
+  })
+
+  const removeBookmarkMutation = useMutation({
+    mutationFn: (bookmarkId) => api.delete(`/bookmarks/${bookmarkId}`),
+    onSuccess: async () => {
+      await qc.invalidateQueries(['bookmarks'])
+      toast.success('Removed from bookmarks')
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Failed to remove bookmark'),
+  })
+
   const course = data?.course
   const topic = course?.topics?.[selectedTopicIndex]
   const selectedSubtopic = topic?.subtopics?.[activeSubtopicIndex]
@@ -79,6 +108,7 @@ export default function CourseResourcesPage() {
   const selectedVideo = selectedSubtopicResources.find((resource) => resource.platform === 'YouTube')
   const selectedCourseLinks = selectedSubtopicResources.filter((resource) => resource.platform === 'Udemy' || resource.platform === 'Coursera')
   const selectedVideoEmbedUrl = getYouTubeEmbedUrl(selectedVideo?.url)
+  const selectedVideoBookmark = selectedVideo?.url ? bookmarkMap.get(selectedVideo.url) : null
 
   useEffect(() => {
     if (!topic?.subtopics?.length) return
@@ -99,6 +129,26 @@ export default function CourseResourcesPage() {
 
   if (!course || !topic) {
     return <div className="text-center py-20 text-[#8888aa]">Topic not found.</div>
+  }
+
+  const toggleBookmark = (resource) => {
+    if (!resource?.url) return
+    const existing = bookmarkMap.get(resource.url)
+    if (existing?._id) {
+      removeBookmarkMutation.mutate(existing._id)
+      return
+    }
+    addBookmarkMutation.mutate({
+      courseId: id,
+      topicId: topic?._id,
+      resource: {
+        title: resource.title,
+        url: resource.url,
+        type: resource.type,
+        platform: resource.platform,
+        thumbnail: resource.thumbnail,
+      },
+    })
   }
 
   return (
@@ -218,10 +268,33 @@ export default function CourseResourcesPage() {
           {selectedVideo && selectedVideoEmbedUrl && (
             <article className="card overflow-hidden">
               <div className="p-4 pb-2">
-                <p className="text-white font-medium">{selectedVideo.title}</p>
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-white font-medium pr-2">{selectedVideo.title}</p>
+                  <button
+                    onClick={() => toggleBookmark(selectedVideo)}
+                    className={`p-2 rounded-xl transition-all ${
+                      selectedVideoBookmark ? 'text-primary-300 bg-primary-500/10 hover:bg-primary-500/15' : 'text-[#9a9ab7] hover:text-white hover:bg-white/5'
+                    }`}
+                    title={selectedVideoBookmark ? 'Remove bookmark' : 'Save bookmark'}
+                    aria-label={selectedVideoBookmark ? 'Remove bookmark' : 'Save bookmark'}
+                    disabled={addBookmarkMutation.isPending || removeBookmarkMutation.isPending}
+                  >
+                    {selectedVideoBookmark ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
+                  </button>
+                </div>
                 <p className="text-xs text-[#8888aa] mt-1">
                   {selectedVideo.channelName || 'YouTube'}{selectedVideo.publishedDate ? ` · ${new Date(selectedVideo.publishedDate).toLocaleDateString()}` : ''}
                 </p>
+                {selectedVideo.verification?.effectivenessScore !== undefined && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span className="px-2 py-0.5 rounded-full bg-primary-500/10 text-primary-300 text-[10px]">
+                      Effectiveness: {Math.round(selectedVideo.verification.effectivenessScore)}/100
+                    </span>
+                    {selectedVideo.verification?.notes?.[0] && (
+                      <span className="text-[10px] text-[#8e8eb0]">{selectedVideo.verification.notes[0]}</span>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="aspect-video bg-black">
                 <iframe
@@ -240,19 +313,43 @@ export default function CourseResourcesPage() {
             <article className="card p-4 space-y-2">
               <h3 className="text-sm font-semibold text-white">Course Links</h3>
               {selectedCourseLinks.map((resource, ri) => (
-                <a
-                  key={`${resource.url}-${ri}`}
-                  href={resource.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 text-sm text-primary-300 hover:text-primary-200"
-                >
-                  <span className={`${platformColors[resource.platform] || 'text-[#8888aa]'} font-medium`}>
-                    [{resource.platform}]
-                  </span>
-                  <span className="truncate">{resource.title}</span>
-                  <ExternalLink size={12} />
-                </a>
+                <div key={`${resource.url}-${ri}`} className="space-y-1">
+                  <div className="flex items-start justify-between gap-3">
+                    <a
+                      href={resource.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 text-sm text-primary-300 hover:text-primary-200 min-w-0"
+                    >
+                      <span className={`${platformColors[resource.platform] || 'text-[#8888aa]'} font-medium`}>
+                        [{resource.platform}]
+                      </span>
+                      <span className="truncate">{resource.title}</span>
+                      <ExternalLink size={12} className="flex-shrink-0" />
+                    </a>
+                    <button
+                      onClick={() => toggleBookmark(resource)}
+                      className={`p-2 rounded-xl transition-all flex-shrink-0 ${
+                        bookmarkMap.get(resource.url) ? 'text-primary-300 bg-primary-500/10 hover:bg-primary-500/15' : 'text-[#9a9ab7] hover:text-white hover:bg-white/5'
+                      }`}
+                      title={bookmarkMap.get(resource.url) ? 'Remove bookmark' : 'Save bookmark'}
+                      aria-label={bookmarkMap.get(resource.url) ? 'Remove bookmark' : 'Save bookmark'}
+                      disabled={addBookmarkMutation.isPending || removeBookmarkMutation.isPending}
+                    >
+                      {bookmarkMap.get(resource.url) ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
+                    </button>
+                  </div>
+                  {resource.verification?.effectivenessScore !== undefined && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[10px] text-[#8e8eb0]">
+                        Effectiveness: {Math.round(resource.verification.effectivenessScore)}/100
+                      </span>
+                      {resource.verification?.notes?.[0] && (
+                        <span className="text-[10px] text-[#7f7fa1]">· {resource.verification.notes[0]}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
               ))}
             </article>
           )}
