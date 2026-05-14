@@ -1,4 +1,4 @@
-# AI Course Builder — FYP Project
+# AI Course Builder 
 
 A full-stack MERN application that generates personalized AI-powered learning courses.
 
@@ -146,4 +146,4 @@ cd frontend && npm run build
 
 ---
 
-Built as Final Year Project — MERN Stack + AI Integration
+MERN Stack + AI Integration
