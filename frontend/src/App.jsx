@@ -13,6 +13,7 @@ import CourseDetailPage from './pages/CourseDetailPage'
 import CourseResourcesPage from './pages/CourseResourcesPage'
 import CourseRoadmapPage from './pages/CourseRoadmapPage'
 import GenerateCoursePage from './pages/GenerateCoursePage'
+import CourseRegeneratePage from './pages/CourseRegeneratePage'
 import QuizPage from './pages/QuizPage'
 import BookmarksPage from './pages/BookmarksPage'
 import ProfilePage from './pages/ProfilePage'
@@ -66,6 +67,7 @@ export default function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/courses" element={<CoursesPage />} />
           <Route path="/courses/generate" element={<GenerateCoursePage />} />
+          <Route path="/courses/:id/regenerate" element={<CourseRegeneratePage />} />
           <Route path="/courses/:id" element={<CourseDetailPage />} />
           <Route path="/courses/:id/roadmap" element={<CourseRoadmapPage />} />
           <Route path="/courses/:id/topics/:topicIndex" element={<CourseResourcesPage />} />
