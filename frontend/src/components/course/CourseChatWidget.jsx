@@ -7,10 +7,16 @@ import api from '../../utils/api'
 const buildCourseMatch = (pathname) =>
   matchPath({ path: '/courses/:id/*' }, pathname) || matchPath({ path: '/courses/:id' }, pathname)
 
+// Paths like /courses/generate must not be treated as a course id (24-char hex only).
+const RESERVED_COURSE_IDS = new Set(['generate'])
+const isMongoObjectId = (value) => /^[a-fA-F0-9]{24}$/.test(String(value || ''))
+
 export default function CourseChatWidget() {
   const location = useLocation()
   const match = useMemo(() => buildCourseMatch(location.pathname), [location.pathname])
-  const courseId = match?.params?.id
+  const rawId = match?.params?.id
+  const courseId =
+    rawId && !RESERVED_COURSE_IDS.has(rawId) && isMongoObjectId(rawId) ? rawId : null
 
   const [isOpen, setIsOpen] = useState(false)
   const [input, setInput] = useState('')

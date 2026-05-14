@@ -6,7 +6,7 @@ const Course = require('../models/Course');
 const Progress = require('../models/Progress');
 const Quiz = require('../models/Quiz');
 const { Notification } = require('../models/Notification');
-const Bookmark = require('../models/Bookmark');
+const CourseBookmark = require('../models/CourseBookmark');
 
 router.use(protect, adminOnly);
 
@@ -103,7 +103,7 @@ router.delete('/users/:id', async (req, res, next) => {
       Course.deleteMany({ userId: targetId }),
       Progress.deleteMany({ userId: targetId }),
       Quiz.deleteMany({ userId: targetId }),
-      Bookmark.deleteMany({ userId: targetId }),
+      CourseBookmark.deleteMany({ userId: targetId }),
       Notification.deleteMany({ userId: targetId }),
     ]);
 

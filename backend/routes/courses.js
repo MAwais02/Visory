@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const rateLimit = require('express-rate-limit');
 const { protect } = require('../middleware/auth');
@@ -8,6 +9,14 @@ const { generateCourse, generateResources, answerCourseDoubt } = require('../uti
 
 // All routes protected
 router.use(protect);
+
+// Reject reserved / invalid ids (e.g. GET /courses/generate must not hit /:id and cast "generate" to ObjectId)
+router.param('id', (req, res, next, id) => {
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(404).json({ error: 'Course not found.' });
+  }
+  next();
+});
 
 const courseChatLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
