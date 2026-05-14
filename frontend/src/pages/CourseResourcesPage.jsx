@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, ExternalLink, BookOpen, Clock3, Bookmark, BookmarkCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../utils/api'
+import BookmarkPersonalNote from '../components/bookmarks/BookmarkPersonalNote'
 
 const platformColors = {
   YouTube: 'text-red-400',
@@ -295,6 +296,9 @@ export default function CourseResourcesPage() {
                     )}
                   </div>
                 )}
+                {selectedVideoBookmark && (
+                  <BookmarkPersonalNote bookmark={selectedVideoBookmark} />
+                )}
               </div>
               <div className="aspect-video bg-black">
                 <iframe
@@ -348,6 +352,9 @@ export default function CourseResourcesPage() {
                         <span className="text-[10px] text-[#7f7fa1]">· {resource.verification.notes[0]}</span>
                       )}
                     </div>
+                  )}
+                  {bookmarkMap.get(resource.url) && (
+                    <BookmarkPersonalNote bookmark={bookmarkMap.get(resource.url)} />
                   )}
                 </div>
               ))}

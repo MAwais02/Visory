@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Bookmark, Trash2, ExternalLink, Tag } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../utils/api'
+import BookmarkPersonalNote from '../components/bookmarks/BookmarkPersonalNote'
 
 export default function BookmarksPage() {
   const qc = useQueryClient()
@@ -50,9 +51,7 @@ export default function BookmarksPage() {
                     {bm.resource?.title} <ExternalLink size={11} className="flex-shrink-0" />
                   </a>
                   <p className="text-xs text-[#8888aa] mt-0.5">{bm.resource?.platform} · {bm.resource?.type}</p>
-                  {bm.personalNote && (
-                    <p className="text-xs text-[#8888aa] mt-2 italic border-l-2 border-primary-500/30 pl-2">{bm.personalNote}</p>
-                  )}
+                  <BookmarkPersonalNote bookmark={bm} />
                   {bm.tags?.length > 0 && (
                     <div className="flex items-center gap-1.5 mt-2 flex-wrap">
                       <Tag size={10} className="text-[#8888aa]" />

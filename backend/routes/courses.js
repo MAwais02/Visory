@@ -6,6 +6,15 @@ const { protect } = require('../middleware/auth');
 const Course = require('../models/Course');
 const Progress = require('../models/Progress');
 const { generateCourse, generateResources, answerCourseDoubt } = require('../utils/aiService');
+const { buildSemanticRelevancePayload } = require('../services/semanticRelevanceService');
+const { resourcePlannerAdaptiveCue } = require('../services/adaptiveLearningService');
+
+const persistSemanticRelevance = async (courseDoc) => {
+  const plain = courseDoc.toObject ? courseDoc.toObject() : courseDoc;
+  const { semanticRelevance } = await buildSemanticRelevancePayload(plain);
+  courseDoc.semanticRelevance = semanticRelevance;
+  await courseDoc.save();
+};
 
 // All routes protected
 router.use(protect);
@@ -115,6 +124,12 @@ router.post('/generate', async (req, res, next) => {
       },
     });
 
+    try {
+      await persistSemanticRelevance(course);
+    } catch (srErr) {
+      console.error('[semanticRelevance] persist after create:', srErr.message);
+    }
+
     // Initialize progress tracking
     await Progress.create({
       userId: req.user._id,
@@ -130,6 +145,16 @@ router.get('/:id', async (req, res, next) => {
   try {
     const course = await Course.findOne({ _id: req.params.id, userId: req.user._id });
     if (!course) return res.status(404).json({ error: 'Course not found.' });
+    res.json({ course });
+  } catch (err) { next(err); }
+});
+
+/** Recompute outline semantic relevance (HF embeddings) from stored title, description, and topic titles. */
+router.post('/:id/semantic-relevance', async (req, res, next) => {
+  try {
+    const course = await Course.findOne({ _id: req.params.id, userId: req.user._id });
+    if (!course) return res.status(404).json({ error: 'Course not found.' });
+    await persistSemanticRelevance(course);
     res.json({ course });
   } catch (err) { next(err); }
 });
@@ -193,7 +218,13 @@ router.post('/:id/regenerate', async (req, res, next) => {
     existing.suggestedProjects = aiCourse.suggestedProjects;
     existing.version += 1;
     existing.status = 'active';
-    await existing.save();
+
+    try {
+      await persistSemanticRelevance(existing);
+    } catch (srErr) {
+      console.error('[semanticRelevance] persist after regenerate:', srErr.message);
+      await existing.save();
+    }
 
     res.json({ course: existing });
   } catch (err) { next(err); }
@@ -216,12 +247,18 @@ router.post('/:id/topics/:topicIndex/resources', async (req, res, next) => {
       return res.status(404).json({ error: 'Subtopic not found.' });
     }
 
+    const progress = await Progress.findOne({ userId: req.user._id, courseId: course._id });
+    const adaptiveCue = resourcePlannerAdaptiveCue(progress?.adaptiveLearning);
+    const adaptiveResourceNuance = progress?.adaptiveLearning?.resourceNuance || 'core';
+
     const resources = await generateResources({
       topicTitle: topic.title,
       subtopicTitle: targetSubtopic?.title || req.body.subtopic || topic.title,
       difficulty: topic.difficultyLevel,
       learningStyle: req.user.profile.learningStyle,
       expectedMinutes: Math.max(10, Math.round(((targetSubtopic?.estimatedHours || 1) * 60))),
+      adaptiveCue,
+      adaptiveResourceNuance,
     });
 
     if (hasExplicitSubtopic && targetSubtopic) {

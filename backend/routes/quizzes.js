@@ -3,7 +3,12 @@ const router = express.Router();
 const { protect } = require('../middleware/auth');
 const Quiz = require('../models/Quiz');
 const Course = require('../models/Course');
+const Progress = require('../models/Progress');
 const { generateQuiz, getAdaptiveSuggestion } = require('../utils/aiService');
+const {
+  computeEngagementLevel,
+  deriveAdaptiveSnapshot,
+} = require('../services/adaptiveLearningService');
 
 router.use(protect);
 
@@ -18,12 +23,19 @@ router.post('/generate', async (req, res, next) => {
     const topic = course.topics[topicIndex];
     if (!topic) return res.status(404).json({ error: 'Topic not found.' });
 
+    const progress = await Progress.findOne({ userId: req.user._id, courseId });
+    const quizDifficulty =
+      progress?.adaptiveLearning?.effectiveQuizDifficulty
+      || topic.difficultyLevel
+      || course.difficulty
+      || 'beginner';
+
     const subtopicTitles = topic.subtopics.map(s => s.title);
 
     const quizData = await generateQuiz({
       topicTitle: topic.title,
       subtopics: subtopicTitles,
-      difficulty: topic.difficultyLevel,
+      difficulty: quizDifficulty,
       questionCount: questionCount || 10,
     });
 
@@ -104,16 +116,56 @@ router.post('/:id/submit', async (req, res, next) => {
     if (passed) quiz.isCompleted = true;
     await quiz.save();
 
-    // Adaptive suggestion (4.2.8)
+    const course = await Course.findOne({ _id: quiz.courseId, userId: req.user._id });
+    let adaptiveLearning = null;
     let adaptiveSuggestion = null;
-    try {
-      adaptiveSuggestion = await getAdaptiveSuggestion({
+
+    if (course) {
+      const topicIdx = course.topics.findIndex((t) => quiz.topicId && t._id.equals(quiz.topicId));
+      const topic = topicIdx >= 0 ? course.topics[topicIdx] : null;
+
+      let progress = await Progress.findOne({ userId: req.user._id, courseId: quiz.courseId });
+      if (!progress) {
+        progress = await Progress.create({
+          userId: req.user._id,
+          courseId: quiz.courseId,
+        });
+      }
+
+      const engagementLevel = computeEngagementLevel(progress);
+      const prevRaw = progress.adaptiveLearning;
+      const previous = prevRaw && typeof prevRaw.toObject === 'function' ? prevRaw.toObject() : prevRaw;
+
+      adaptiveLearning = deriveAdaptiveSnapshot({
+        previous,
+        quizPct: percentage,
+        quizPassed: passed,
+        timeTakenSeconds: Number(timeTaken) || 0,
+        topicDifficulty: topic?.difficultyLevel || course.difficulty,
         topicTitle: quiz.topicTitle,
-        quizScore: percentage,
-        timeSpent: timeTaken,
-        difficulty: 'intermediate',
+        engagementLevel,
       });
-    } catch (e) { /* non-blocking */ }
+
+      progress.adaptiveLearning = adaptiveLearning;
+      await progress.save();
+
+      if (topicIdx >= 0) {
+        course.topics[topicIdx].quizScore = percentage;
+        await course.save();
+      }
+
+      const timeSpentMinutes = Math.max(0.05, (Number(timeTaken) || 0) / 60);
+      try {
+        adaptiveSuggestion = await getAdaptiveSuggestion({
+          userId: req.user._id,
+          topicTitle: quiz.topicTitle,
+          quizScore: percentage,
+          timeSpentMinutes,
+          difficulty: topic?.difficultyLevel || course.difficulty,
+          adaptiveSnapshot: adaptiveLearning,
+        });
+      } catch (e) { /* non-blocking */ }
+    }
 
     res.json({
       attempt: { ...attempt, gradedAnswers },
@@ -122,6 +174,7 @@ router.post('/:id/submit', async (req, res, next) => {
       passed,
       bestScore: quiz.bestScore,
       adaptiveSuggestion,
+      adaptiveLearning,
     });
   } catch (err) { next(err); }
 });

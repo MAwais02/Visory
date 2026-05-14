@@ -21,15 +21,19 @@ router.post('/', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// PUT /api/bookmarks/:id — Update note/tags
+// PUT /api/bookmarks/:id — Partial update (only sent fields; avoids wiping note/tags)
 router.put('/:id', async (req, res, next) => {
   try {
-    const bookmark = await CourseBookmark.findOneAndUpdate(
-      { _id: req.params.id, userId: req.user._id },
-      { personalNote: req.body.personalNote, tags: req.body.tags },
-      { new: true }
-    );
+    const updates = {};
+    if (req.body.personalNote !== undefined) updates.personalNote = req.body.personalNote;
+    if (req.body.tags !== undefined) updates.tags = req.body.tags;
+    const bookmark = await CourseBookmark.findOne({ _id: req.params.id, userId: req.user._id });
     if (!bookmark) return res.status(404).json({ error: 'Bookmark not found.' });
+    if (Object.keys(updates).length === 0) {
+      return res.json({ bookmark });
+    }
+    Object.assign(bookmark, updates);
+    await bookmark.save();
     res.json({ bookmark });
   } catch (err) { next(err); }
 });

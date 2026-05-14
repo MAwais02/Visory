@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { CheckCircle2, XCircle, Clock, Trophy, RotateCcw, ArrowLeft } from 'lucide-react'
@@ -8,6 +8,7 @@ import api from '../utils/api'
 export default function QuizPage() {
   const { courseId, quizId } = useParams()
   const navigate = useNavigate()
+  const qc = useQueryClient()
   const [answers, setAnswers] = useState({})
   const [submitted, setSubmitted] = useState(false)
   const [result, setResult] = useState(null)
@@ -63,7 +64,7 @@ export default function QuizPage() {
 
   // Results screen
   if (submitted && result) {
-    const { percentage, passed, adaptiveSuggestion } = result
+    const { percentage, passed, adaptiveSuggestion, adaptiveLearning } = result
     return (
       <div className="max-w-lg mx-auto space-y-6 animate-slide-up">
         <div className={`card p-8 text-center ${passed ? 'border-green-500/30' : 'border-red-500/20'}`}>
@@ -108,6 +109,18 @@ export default function QuizPage() {
           })}
         </div>
 
+        {adaptiveLearning?.updatedAt && (
+          <div className="card p-4 border-violet-500/20 bg-violet-500/5">
+            <p className="text-xs font-semibold text-violet-300 mb-2">Your adaptive profile (saved)</p>
+            <ul className="text-xs text-[#c8c8de] space-y-1">
+              <li><span className="text-[#8888aa]">Resource focus:</span> {adaptiveLearning.resourceNuance}</li>
+              <li><span className="text-[#8888aa]">Pace:</span> {adaptiveLearning.paceHint}</li>
+              <li><span className="text-[#8888aa]">Next quiz difficulty:</span> {adaptiveLearning.effectiveQuizDifficulty}</li>
+              <li><span className="text-[#8888aa]">Engagement:</span> {adaptiveLearning.engagementLevel}</li>
+            </ul>
+          </div>
+        )}
+
         {adaptiveSuggestion && (
           <div className="card p-4 border-primary-500/20 bg-primary-500/5">
             <p className="text-xs font-semibold text-primary-400 mb-1">🤖 AI Recommendation</p>
@@ -121,11 +134,30 @@ export default function QuizPage() {
                 ))}
               </ul>
             )}
+            {adaptiveSuggestion.additionalResources?.length > 0 && (
+              <div className="mt-3">
+                <p className="text-xs font-medium text-[#9090ae] mb-1">Suggested resource angles</p>
+                <ul className="space-y-1">
+                  {adaptiveSuggestion.additionalResources.map((r, i) => (
+                    <li key={i} className="text-xs text-[#a0a0bc] flex items-start gap-1.5">
+                      <span className="text-primary-400 mt-0.5">→</span> {r}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         )}
 
         <div className="flex gap-3">
-          <button onClick={() => navigate(`/courses/${courseId}`)} className="btn-ghost flex items-center gap-2 flex-1">
+          <button
+            type="button"
+            onClick={() => {
+              qc.invalidateQueries({ queryKey: ['progress', courseId] })
+              navigate(`/courses/${courseId}`)
+            }}
+            className="btn-ghost flex items-center gap-2 flex-1"
+          >
             <ArrowLeft size={14} /> Back to Course
           </button>
           {!passed && (

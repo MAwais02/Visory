@@ -101,6 +101,18 @@ const courseSchema = new mongoose.Schema({
   status: { type: String, enum: ['generating', 'active', 'completed', 'archived'], default: 'generating' },
   completionPercentage: { type: Number, default: 0 },
 
+  // Outline vs course title+description (HF sentence-transformers / MiniLM via Transformers.js)
+  semanticRelevance: {
+    overallScore: { type: Number, min: 0, max: 100 },
+    moduleScores: [{
+      title: String,
+      relevance: { type: Number, min: 0, max: 100 },
+      cosine: Number,
+    }],
+    embeddingModel: String,
+    computedAt: Date,
+  },
+
   isActive: { type: Boolean, default: true },
   version: { type: Number, default: 1 }, // for course regeneration tracking
 }, { timestamps: true });

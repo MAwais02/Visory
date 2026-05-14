@@ -34,6 +34,20 @@ const progressSchema = new mongoose.Schema({
   completionPercentage: { type: Number, default: 0 },
   isCompleted: { type: Boolean, default: false },
   completedAt: Date,
+
+  // 6.1.9 — Adaptive learning (quiz + engagement → resources / pace / difficulty hints)
+  adaptiveLearning: {
+    resourceNuance: { type: String, enum: ['remedial', 'core', 'stretch'], default: 'core' },
+    paceHint: { type: String, enum: ['slow_down', 'standard', 'speed_up'], default: 'standard' },
+    difficultyAdjustment: { type: String, enum: ['easier', 'same', 'harder'], default: 'same' },
+    effectiveQuizDifficulty: { type: String, enum: ['beginner', 'intermediate', 'advanced'] },
+    engagementLevel: { type: String, enum: ['low', 'medium', 'high'], default: 'medium' },
+    lastQuizScorePct: Number,
+    lastQuizTopicTitle: String,
+    lastQuizPassed: Boolean,
+    lastTimeTakenSeconds: Number,
+    updatedAt: Date,
+  },
 }, { timestamps: true });
 
 progressSchema.index({ userId: 1, courseId: 1 }, { unique: true });

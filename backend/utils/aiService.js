@@ -1162,7 +1162,9 @@ RETURN ONLY VALID JSON. No markdown. No extra text.`;
 /**
  * 4.2.4 - Resource Recommendation Engine
  */
-const buildResourceQueryPrompt = ({ topicTitle, subtopicTitle, difficulty, learningStyle }) => `You are a learning resource query planner.
+const buildResourceQueryPrompt = ({ topicTitle, subtopicTitle, difficulty, learningStyle, adaptiveCue }) => {
+  const cue = String(adaptiveCue || '').trim();
+  return `You are a learning resource query planner.
 Your job is to generate SEARCH QUERIES only. Never output URLs.
 
 Input:
@@ -1170,7 +1172,7 @@ Input:
 - Subtopic: ${subtopicTitle}
 - Difficulty: ${difficulty}
 - Learning Style: ${learningStyle}
-
+${cue ? `\nPersonalization (follow closely):\n${cue}\n` : ''}
 Return ONLY valid JSON in this exact shape:
 {
   "queries": [
@@ -1188,9 +1190,10 @@ STRICT RULES:
 - query must not include URL, domain, or protocol
 - prioritize high-signal educational keywords
 - RETURN ONLY VALID JSON`;
+};
 
-const generateResourceQueries = async ({ topicTitle, subtopicTitle, difficulty, learningStyle }) => {
-  const prompt = buildResourceQueryPrompt({ topicTitle, subtopicTitle, difficulty, learningStyle });
+const generateResourceQueries = async ({ topicTitle, subtopicTitle, difficulty, learningStyle, adaptiveCue }) => {
+  const prompt = buildResourceQueryPrompt({ topicTitle, subtopicTitle, difficulty, learningStyle, adaptiveCue });
   const raw = await callGemini(prompt, 1024);
   const parsed = safeParseJSON(raw);
 
@@ -1206,16 +1209,33 @@ const generateResourceQueries = async ({ topicTitle, subtopicTitle, difficulty, 
   };
 };
 
-const generateResources = async ({ topicTitle, subtopicTitle, difficulty, learningStyle, expectedMinutes }) => {
+const generateResources = async ({
+  topicTitle,
+  subtopicTitle,
+  difficulty,
+  learningStyle,
+  expectedMinutes,
+  adaptiveCue,
+  adaptiveResourceNuance,
+}) => {
   let queryPlan;
+  const nuance = adaptiveResourceNuance || 'core';
   try {
-    queryPlan = await generateResourceQueries({ topicTitle, subtopicTitle, difficulty, learningStyle });
+    queryPlan = await generateResourceQueries({
+      topicTitle,
+      subtopicTitle,
+      difficulty,
+      learningStyle,
+      adaptiveCue,
+    });
   } catch (error) {
     console.error('[aiService] Failed to generate search queries, using deterministic fallback:', error.message);
+    const gentle = nuance === 'remedial' ? 'for beginners step by step ' : '';
+    const deep = nuance === 'stretch' ? 'advanced in depth ' : '';
     queryPlan = {
       queries: [
-        { query: `${topicTitle} ${subtopicTitle} full tutorial ${difficulty}`.trim(), intent: 'video_tutorial', resourceType: 'video' },
-        { query: `${topicTitle} ${subtopicTitle} beginner project walkthrough`.trim(), intent: 'practice_project', resourceType: 'video' },
+        { query: `${gentle}${deep}${topicTitle} ${subtopicTitle} full tutorial ${difficulty}`.trim(), intent: 'video_tutorial', resourceType: 'video' },
+        { query: `${gentle}${topicTitle} ${subtopicTitle} explained practice`.trim(), intent: 'practice_project', resourceType: 'video' },
       ],
     };
   }
@@ -1275,24 +1295,40 @@ RETURN ONLY VALID JSON. No markdown, no code blocks, no trailing commas.`;
 };
 
 /**
- * 4.2.8 - Adaptive Learning Suggestions
+ * 4.2.8 - Adaptive Learning Suggestions (Gemini narrative + structured assessment)
  */
-const getAdaptiveSuggestion = async ({ userId, topicTitle, quizScore, timeSpent, difficulty }) => {
+const getAdaptiveSuggestion = async ({
+  userId,
+  topicTitle,
+  quizScore,
+  timeSpentMinutes,
+  difficulty,
+  adaptiveSnapshot,
+}) => {
+  const snap = adaptiveSnapshot && typeof adaptiveSnapshot === 'object' ? adaptiveSnapshot : {};
+  const snapLine = [
+    snap.resourceNuance && `Resource focus: ${snap.resourceNuance}`,
+    snap.paceHint && `Pace hint: ${snap.paceHint}`,
+    snap.effectiveQuizDifficulty && `Suggested next quiz difficulty: ${snap.effectiveQuizDifficulty}`,
+    snap.engagementLevel && `Engagement: ${snap.engagementLevel}`,
+  ].filter(Boolean).join(' | ');
+
   const prompt = `A learner is studying "${topicTitle}" at ${difficulty} difficulty.
 Quiz score: ${quizScore}%
-Time spent: ${timeSpent} minutes
+Time spent on quiz: ${Number(timeSpentMinutes).toFixed(1)} minutes
+${snapLine ? `System adaptive profile: ${snapLine}\n` : ''}
 
 Return ONLY this JSON:
 {
   "assessment": "on_track",
-  "recommendation": "One sentence recommendation under 120 chars",
+  "recommendation": "One sentence recommendation under 160 chars",
   "adjustDifficulty": "maintain",
   "additionalResources": ["resource suggestion 1", "resource suggestion 2"],
   "studyTips": ["tip 1", "tip 2"]
 }
 
 assessment must be one of: struggling, on_track, excelling
-adjustDifficulty must be one of: increase, maintain, decrease
+adjustDifficulty must be one of: increase, maintain, decrease — align with whether they need easier or harder material next.
 RETURN ONLY VALID JSON. No markdown, no code blocks, no trailing commas.`;
 
   const raw = await callGemini(prompt, 1024);
